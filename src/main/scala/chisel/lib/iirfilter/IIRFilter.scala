@@ -31,7 +31,8 @@ class IIRFilter(
   coefDecimalWidth: Int,
   outputWidth:      Int,
   numeratorNum:     Int,
-  denominatorNum:   Int)
+  denominatorNum:   Int,
+  minMemSize:       Int = 1)
     extends Module {
   val io = IO(new Bundle {
     /*
@@ -113,7 +114,7 @@ class IIRFilter(
   }
 
   val inputReg = RegInit(0.S(inputWidth.W))
-  val inputMem = Mem(numeratorNum - 1, SInt(inputWidth.W))
+  val inputMem = Mem(math.max((numeratorNum - 1), minMemSize), SInt(inputWidth.W))
   val inputMemAddr = RegInit(0.U(math.max(log2Ceil(numeratorNum - 1), 1).W))
   val inputMemOut = Wire(SInt(inputWidth.W))
   val inputRdWr = inputMem(inputMemAddr)
@@ -137,7 +138,7 @@ class IIRFilter(
     }
   }
 
-  val outputMem = Mem(denominatorNum, SInt(outputWidth.W))
+  val outputMem = Mem(math.max(denominatorNum, minMemSize), SInt(outputWidth.W))
   val outputMemAddr = RegInit(0.U(math.max(log2Ceil(denominatorNum), 1).W))
   val outputMemOut = Wire(SInt(outputWidth.W))
   val outputRdWr = outputMem(outputMemAddr)

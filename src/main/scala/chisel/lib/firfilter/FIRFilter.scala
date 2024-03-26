@@ -26,7 +26,8 @@ class FIRFilter(
   inputWidth:       Int,
   coefWidth:        Int,
   coefDecimalWidth: Int,
-  coefNum:          Int)
+  coefNum:          Int,
+  minMemSize:       Int = 1)
     extends Module {
 
   val outputWidth = inputWidth + coefWidth + log2Ceil(coefNum)
@@ -92,7 +93,7 @@ class FIRFilter(
   }
 
   val inputReg = RegInit(0.S(inputWidth.W))
-  val inputMem = Mem(coefNum - 1, SInt(inputWidth.W))
+  val inputMem = Mem(math.max((coefNum - 1), minMemSize), SInt(inputWidth.W))
   val inputMemAddr = RegInit(0.U(math.max(log2Ceil(coefNum - 1), 1).W))
   val inputMemOut = Wire(SInt(inputWidth.W))
   val inputRdWr = inputMem(inputMemAddr)
