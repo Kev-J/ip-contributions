@@ -93,7 +93,7 @@ class FIRFilter(
   }
 
   val inputReg = RegInit(0.S(inputWidth.W))
-  val inputMem = Mem(math.max((coefNum - 1), minMemSize), SInt(inputWidth.W))
+  val inputMem = SyncReadMem(math.max((coefNum - 1), minMemSize), SInt(inputWidth.W))
   val inputMemAddr = RegInit(0.U(math.max(log2Ceil(coefNum - 1), 1).W))
   val inputMemOut = Wire(SInt(inputWidth.W))
   val inputRdWr = inputMem(inputMemAddr)
@@ -109,7 +109,13 @@ class FIRFilter(
     inputMemOut := inputRdWr
   }
 
-  when((state === FIRFilterState.Compute) && (coefIdx < (coefNum - 1).U)) {
+  when ((state === FIRFilterState.Idle) && io.input.valid) {
+    when(inputMemAddr === (coefNum - 2).U) {
+      inputMemAddr := 0.U
+    }.otherwise {
+      inputMemAddr := inputMemAddr + 1.U
+    }
+  }.elsewhen((state === FIRFilterState.Compute) && (coefIdx < (coefNum - 2).U)) {
     when(inputMemAddr === (coefNum - 2).U) {
       inputMemAddr := 0.U
     }.otherwise {

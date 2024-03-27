@@ -113,8 +113,12 @@ class IIRFilter(
     coefNum := 0.U
   }
 
+  println("###")
+  println(math.max((numeratorNum - 1), minMemSize))
+  println(inputWidth.W)
+
   val inputReg = RegInit(0.S(inputWidth.W))
-  val inputMem = Mem(math.max((numeratorNum - 1), minMemSize), SInt(inputWidth.W))
+  val inputMem = SyncReadMem(math.max((numeratorNum - 1), minMemSize), SInt(inputWidth.W))
   val inputMemAddr = RegInit(0.U(math.max(log2Ceil(numeratorNum - 1), 1).W))
   val inputMemOut = Wire(SInt(inputWidth.W))
   val inputRdWr = inputMem(inputMemAddr)
@@ -130,7 +134,13 @@ class IIRFilter(
     inputMemOut := inputRdWr
   }
 
-  when((state === IIRFilterState.ComputeNum) && (coefNum < (numeratorNum - 1).U)) {
+  when ((state === IIRFilterState.Idle) && io.input.valid) {
+    when(inputMemAddr === (numeratorNum - 2).U) {
+      inputMemAddr := 0.U
+    }.otherwise {
+      inputMemAddr := inputMemAddr + 1.U
+    }
+  }.elsewhen((state === IIRFilterState.ComputeNum) && (coefNum < (numeratorNum - 2).U)) { //TODO what if numeratorNum == 1?
     when(inputMemAddr === (numeratorNum - 2).U) {
       inputMemAddr := 0.U
     }.otherwise {
@@ -138,7 +148,7 @@ class IIRFilter(
     }
   }
 
-  val outputMem = Mem(math.max(denominatorNum, minMemSize), SInt(outputWidth.W))
+  val outputMem = SyncReadMem(math.max(denominatorNum, minMemSize), SInt(outputWidth.W))
   val outputMemAddr = RegInit(0.U(math.max(log2Ceil(denominatorNum), 1).W))
   val outputMemOut = Wire(SInt(outputWidth.W))
   val outputRdWr = outputMem(outputMemAddr)
@@ -151,7 +161,13 @@ class IIRFilter(
     outputMemOut := outputRdWr
   }
 
-  when((state === IIRFilterState.ComputeDen) && (coefNum < (denominatorNum - 1).U)) {
+  when((state === IIRFilterState.ComputeNum) && (coefNum === (numeratorNum - 1).U)) { //TODO what if numeratorNum == 1?
+    when(outputMemAddr === (denominatorNum - 1).U) {
+      outputMemAddr := 0.U
+    }.otherwise {
+      outputMemAddr := outputMemAddr + 1.U
+    }
+  }.elsewhen((state === IIRFilterState.ComputeDen) && (coefNum < (denominatorNum - 2).U)) { //TODO what if denominatorNum == 1?
     when(outputMemAddr === (denominatorNum - 1).U) {
       outputMemAddr := 0.U
     }.otherwise {
