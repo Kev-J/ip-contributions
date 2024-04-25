@@ -63,7 +63,7 @@ class IIRFilter(
   val coefNum = RegInit(0.U(log2Ceil(math.max(numeratorNum, denominatorNum)).W))
 
   object IIRFilterState extends ChiselEnum {
-    val Idle, ComputeNum, ComputeDen, Valid, StoreLast = Value
+    val Idle, ComputeNum, ComputeDen, Valid, StoreLast, ComputeOutput = Value
   }
 
   val state = RegInit(IIRFilterState.Idle)
@@ -85,6 +85,9 @@ class IIRFilter(
       }
     }
     is(IIRFilterState.StoreLast) {
+      state := IIRFilterState.ComputeOutput
+    }
+    is(IIRFilterState.ComputeOutput) {
       state := IIRFilterState.Valid
     }
     is(IIRFilterState.Valid) {
@@ -200,9 +203,14 @@ class IIRFilter(
     multCoef := io.num(coefNum)
   }
 
+  val outputReg = RegInit(0.S(outputWidth.W))
+  when (state === IIRFilterState.ComputeOutput) {
+    outputReg := inputSum -& (outputSum >> coefDecimalWidth)
+  }
+
   multOut := multIn * multCoef
 
   io.input.ready := state === IIRFilterState.Idle
   io.output.valid := state === IIRFilterState.Valid
-  io.output.bits := inputSum -& (outputSum >> coefDecimalWidth)
+  io.output.bits := outputReg
 }
