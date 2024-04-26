@@ -60,10 +60,13 @@ class IIRFilter(
   val minOutputWidth = inputWidth + coefWidth + log2Ceil(numeratorNum + denominatorNum) + 1
   assert(outputWidth >= minOutputWidth)
 
-  val coefNum = RegInit(0.U(log2Ceil(math.max(numeratorNum, denominatorNum)).W))
+  val coefNumAddr = RegInit(1.U(math.max(numeratorNum, denominatorNum).W))
+  val coefNumGet = RegInit(0.U(math.max(numeratorNum, denominatorNum).W))
+  val coefNumFetch = RegInit(0.U(math.max(numeratorNum, denominatorNum).W))
+  val coefNumMult = RegInit(0.U(math.max(numeratorNum, denominatorNum).W))
 
   object IIRFilterState extends ChiselEnum {
-    val Idle, ComputeNum, ComputeDen, Valid, StoreLast, ComputeOutput = Value
+    val Idle, ComputeNum, ComputeDen, ShiftOutputSum, ComputeOutput, Valid = Value
   }
 
   val state = RegInit(IIRFilterState.Idle)
@@ -75,16 +78,16 @@ class IIRFilter(
       }
     }
     is(IIRFilterState.ComputeNum) {
-      when(coefNum === (numeratorNum - 1).U) {
+      when(coefNumMult(numeratorNum - 1)) {
         state := IIRFilterState.ComputeDen
       }
     }
     is(IIRFilterState.ComputeDen) {
-      when(coefNum === (denominatorNum - 1).U) {
-        state := IIRFilterState.StoreLast
+      when(coefNumMult(denominatorNum - 1)) {
+        state := IIRFilterState.ShiftOutputSum
       }
     }
-    is(IIRFilterState.StoreLast) {
+    is(IIRFilterState.ShiftOutputSum) {
       state := IIRFilterState.ComputeOutput
     }
     is(IIRFilterState.ComputeOutput) {
@@ -97,118 +100,199 @@ class IIRFilter(
     }
   }
 
-  when((state === IIRFilterState.Idle) && io.input.valid) {
-    coefNum := 1.U
-  }.elsewhen(state === IIRFilterState.ComputeNum) {
-    when(coefNum === (numeratorNum - 1).U) {
-      coefNum := 0.U
-    }.otherwise {
-      coefNum := coefNum + 1.U
-    }
-  }.elsewhen(state === IIRFilterState.ComputeDen) {
-    when(coefNum === (denominatorNum - 1).U) {
-      coefNum := 0.U
-    }.otherwise {
-      coefNum := coefNum + 1.U
-    }
-  }.otherwise {
-    coefNum := 0.U
-  }
-
+  // Input memory
   val inputReg = RegInit(0.S(inputWidth.W))
-  val inputMem = Mem(numeratorNum - 1, SInt(inputWidth.W))
-  val inputMemAddr = RegInit(0.U(math.max(log2Ceil(numeratorNum - 1), 1).W))
+  val inputMem = Mem(numeratorNum, SInt(inputWidth.W))
+  val inputMemReadAddr = RegInit(0.U(log2Ceil(numeratorNum).W))
+  val inputMemWriteAddr = RegInit(0.U(log2Ceil(numeratorNum).W))
+  val inputMemAddr = Wire(UInt(log2Ceil(numeratorNum).W))
   val inputMemOut = Wire(SInt(inputWidth.W))
   val inputRdWr = inputMem(inputMemAddr)
 
+  when(state === IIRFilterState.ComputeNum) {
+    inputMemAddr := inputMemReadAddr
+  }.otherwise {
+    inputMemAddr := inputMemWriteAddr
+  }
+
   inputMemOut := DontCare
 
-  when(state === IIRFilterState.StoreLast) {
-    inputRdWr := inputReg
-  }.elsewhen((state === IIRFilterState.Idle) && io.input.valid) {
-    inputReg := io.input.bits // Delayed write
-    inputMemOut := inputRdWr
+  when((state === IIRFilterState.Idle) && io.input.valid) {
+    inputRdWr := io.input.bits // Delayed write
   }.otherwise {
     inputMemOut := inputRdWr
   }
 
-  when((state === IIRFilterState.ComputeNum) && (coefNum < (numeratorNum - 1).U)) {
-    when(inputMemAddr === (numeratorNum - 2).U) {
-      inputMemAddr := 0.U
+  when((state === IIRFilterState.Idle) && io.input.valid) {
+    when(inputMemWriteAddr === 0.U) {
+      inputMemWriteAddr := (numeratorNum - 1).U
     }.otherwise {
-      inputMemAddr := inputMemAddr + 1.U
+      inputMemWriteAddr := inputMemWriteAddr - 1.U
     }
   }
 
+  // Output memory
+  val outputReg = RegInit(0.S(outputWidth.W))
   val outputMem = Mem(denominatorNum, SInt(outputWidth.W))
-  val outputMemAddr = RegInit(0.U(math.max(log2Ceil(denominatorNum), 1).W))
+  val outputMemReadAddr = RegInit(0.U(log2Ceil(denominatorNum).W))
+  val outputMemWriteAddr = RegInit(0.U(log2Ceil(denominatorNum).W))
+  val outputMemAddr = Wire(UInt(log2Ceil(denominatorNum).W))
   val outputMemOut = Wire(SInt(outputWidth.W))
   val outputRdWr = outputMem(outputMemAddr)
 
+  when(state === IIRFilterState.ComputeDen) {
+    outputMemAddr := outputMemReadAddr
+  }.otherwise {
+    outputMemAddr := outputMemWriteAddr
+  }
+
   outputMemOut := DontCare
 
-  when((state === IIRFilterState.Valid) && (RegNext(state) === IIRFilterState.StoreLast)) {
-    outputRdWr := io.output.bits
+  when((state === IIRFilterState.Valid) && (RegNext(state) =/= IIRFilterState.Valid)) {
+    when(outputMemWriteAddr === 0.U) {
+      outputMemWriteAddr := (denominatorNum - 1).U
+    }.otherwise {
+      outputMemWriteAddr := outputMemWriteAddr - 1.U
+    }
+    outputRdWr := outputReg
   }.otherwise {
     outputMemOut := outputRdWr
   }
 
-  when((state === IIRFilterState.ComputeDen) && (coefNum < (denominatorNum - 1).U)) {
-    when(outputMemAddr === (denominatorNum - 1).U) {
-      outputMemAddr := 0.U
+  // Stage 1: Set addresses
+  when(state === IIRFilterState.ComputeNum) {
+    when(coefNumMult(numeratorNum - 1)) {
+      coefNumAddr := 1.U
     }.otherwise {
-      outputMemAddr := outputMemAddr + 1.U
+      coefNumAddr := coefNumAddr << 1
     }
-  }
-
-  val inputSum = RegInit(0.S((inputWidth + coefWidth + log2Ceil(numeratorNum)).W))
-  val outputSum = RegInit(0.S((outputWidth + coefWidth + log2Ceil(denominatorNum)).W))
-
-  val multOut = Wire(SInt((outputWidth + coefWidth).W))
-  val multOutReg = RegInit(0.S((outputWidth + coefWidth).W))
-  val multIn = Wire(SInt(outputWidth.W))
-  val multCoef = Wire(SInt(coefWidth.W))
-
-  when((state === IIRFilterState.Idle) && io.input.valid) {
-    multOutReg := multOut
-    outputSum := 0.S
-    inputSum := 0.S
-  }.elsewhen(state === IIRFilterState.ComputeNum) {
-    multOutReg := multOut
-    inputSum := inputSum +& multOutReg
   }.elsewhen(state === IIRFilterState.ComputeDen) {
-    multOutReg := multOut
-
-    when(coefNum === 0.U) {
-      // Store numerator's last value
-      inputSum := inputSum +& multOutReg
-    }.otherwise {
-      outputSum := outputSum +& multOutReg
-    }
-  }.elsewhen(state === IIRFilterState.StoreLast) {
-    outputSum := outputSum +& multOutReg
+    coefNumAddr := coefNumAddr << 1
+  }.otherwise {
+    coefNumAddr := 1.U
   }
 
   when(state === IIRFilterState.ComputeNum) {
-    multIn := inputMemOut
+    when(inputMemReadAddr === (numeratorNum - 1).U) {
+      inputMemReadAddr := 0.U
+    }.otherwise {
+      inputMemReadAddr := inputMemReadAddr + 1.U
+    }
   }.elsewhen(state === IIRFilterState.ComputeDen) {
-    multIn := outputMemOut
+    when(outputMemAddr === (denominatorNum - 1).U) {
+      outputMemReadAddr := 0.U
+    }.otherwise {
+      outputMemReadAddr := outputMemReadAddr + 1.U
+    }
+  }.elsewhen(state === IIRFilterState.Idle) {
+    inputMemReadAddr := inputMemWriteAddr
+  }.elsewhen((state === IIRFilterState.Valid) && (RegNext(state) =/= IIRFilterState.Valid)) {
+    outputMemReadAddr := outputMemWriteAddr
+  }
+
+  // Stage 2: get coef num
+  when(state === IIRFilterState.ComputeNum) {
+    when(coefNumMult(numeratorNum - 1)) {
+      coefNumGet := 0.U
+    }.otherwise {
+      coefNumGet := coefNumAddr
+    }
+  }.elsewhen(state === IIRFilterState.ComputeDen) {
+    when(coefNumMult(denominatorNum - 1)) {
+      coefNumGet := 0.U
+    }.otherwise {
+      coefNumGet := coefNumAddr
+    }
   }.otherwise {
-    multIn := io.input.bits
+    coefNumGet := 0.U
   }
 
-  when(state === IIRFilterState.ComputeDen) {
-    multCoef := io.den(coefNum)
+  val coefNum = RegInit(0.U(log2Ceil(math.max(numeratorNum, denominatorNum)).W))
+  coefNum := PriorityEncoder(coefNumAddr)
+
+  val multInRegTmp = RegInit(0.S(outputWidth.W))
+
+  when(state === IIRFilterState.ComputeNum) {
+    multInRegTmp := inputMemOut
+  }.elsewhen(state === IIRFilterState.ComputeDen) {
+    multInRegTmp := outputMemOut
+  }
+
+  // Stage 3: Fetch operands
+  when(state === IIRFilterState.ComputeNum) {
+    when(coefNumMult(numeratorNum - 1)) {
+      coefNumFetch := 0.U
+    }.otherwise {
+      coefNumFetch := coefNumGet
+    }
+  }.elsewhen(state === IIRFilterState.ComputeDen) {
+    when(coefNumMult(denominatorNum - 1)) {
+      coefNumFetch := 0.U
+    }.otherwise {
+      coefNumFetch := coefNumGet
+    }
   }.otherwise {
-    multCoef := io.num(coefNum)
+    coefNumFetch := 0.U
   }
 
-  val outputReg = RegInit(0.S(outputWidth.W))
-  when (state === IIRFilterState.ComputeOutput) {
-    outputReg := inputSum -& (outputSum >> coefDecimalWidth)
+  val multInReg = RegInit(0.S(outputWidth.W))
+  val multCoefReg = RegInit(0.S(coefWidth.W))
+  multInReg := multInRegTmp
+  when(state === IIRFilterState.ComputeNum) {
+    multCoefReg := io.num(coefNum)
+  }.elsewhen(state === IIRFilterState.ComputeDen) {
+    multCoefReg := io.den(coefNum)
   }
 
-  multOut := multIn * multCoef
+  // Stage 4: Get multiplication output
+  when(state === IIRFilterState.ComputeNum) {
+    when(coefNumMult(numeratorNum - 1)) {
+      coefNumMult := 0.U
+    }.otherwise {
+      coefNumMult := coefNumFetch
+    }
+  }.elsewhen(state === IIRFilterState.ComputeDen) {
+    when(coefNumMult(denominatorNum - 1)) {
+      coefNumMult := 0.U
+    }.otherwise {
+      coefNumMult := coefNumFetch
+    }
+  }.otherwise {
+    coefNumMult := 0.U
+  }
+
+  val multOutReg = RegInit(0.S((outputWidth + coefWidth).W))
+
+  multOutReg := multInReg * multCoefReg
+
+  // Stage 5: Accumulate
+  val inputSum = RegInit(0.S((inputWidth + coefWidth + log2Ceil(numeratorNum)).W))
+  val outputSum = RegInit(0.S((outputWidth + coefWidth + log2Ceil(denominatorNum)).W))
+  when(state === IIRFilterState.ComputeNum) {
+    when(coefNumMult(0)) {
+      inputSum := multOutReg
+    }.otherwise {
+      inputSum := inputSum +& multOutReg
+    }
+  }.elsewhen(state === IIRFilterState.ComputeDen) {
+    when(coefNumMult(0)) {
+      outputSum := multOutReg
+    }.otherwise {
+      outputSum := outputSum +& multOutReg
+    }
+  }.elsewhen(state === IIRFilterState.ShiftOutputSum) {
+    outputSum := outputSum >> coefDecimalWidth
+  }.elsewhen(state === IIRFilterState.Idle) {
+    inputSum := 0.S
+    outputSum := 0.S
+  }
+
+  val outputDiff = Wire(SInt(outputWidth.W))
+  when(state === IIRFilterState.ComputeOutput) {
+    outputReg := outputDiff
+  }
+
+  outputDiff := inputSum -& outputSum
 
   io.input.ready := state === IIRFilterState.Idle
   io.output.valid := state === IIRFilterState.Valid
