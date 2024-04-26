@@ -33,85 +33,34 @@ class IIRFilterNumeratorTest extends AnyFlatSpec with ChiselScalatestTester {
         denominatorNum = den.length
       )
     ) { dut =>
+      val inputDriver = new DecoupledDriver(dut.io.input)
+      inputDriver.setSinkClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+      inputDriver.setSourceClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+
+      val outputDriver = new DecoupledDriver(dut.io.output)
+      outputDriver.setSinkClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+      outputDriver.setSourceClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+
       dut.io.num.poke(Vec.Lit(num.map(_.S(coefWidth.W)): _*))
       dut.io.den.poke(Vec.Lit(den.map(_.S(coefWidth.W)): _*))
 
       dut.io.output.ready.poke(true.B)
 
       // Sample 1: Write 1. on input port
-      dut.io.input.bits.poke(1.S)
-      dut.io.input.valid.poke(true.B)
-      dut.io.input.ready.expect(true.B)
-      dut.io.output.valid.expect(false.B)
-      dut.clock.step(1)
-      dut.io.input.valid.poke(false.B)
-      dut.io.input.ready.expect(false.B)
-
-      for (i <- 0 until (num.length + den.length)) {
-        dut.io.output.valid.expect(false.B)
-        dut.io.input.ready.expect(false.B)
-        dut.clock.step(1)
-      }
-
-      dut.io.output.bits.expect(2.S)
-      dut.io.output.valid.expect(true.B)
-
-      dut.clock.step(1)
+      inputDriver.enqueue(1.S)
+      outputDriver.expectDequeue(2.S)
 
       // Sample 2: Write 1. on input port
-      dut.io.input.bits.poke(1.S)
-      dut.io.input.valid.poke(true.B)
-      dut.io.input.ready.expect(true.B)
-      dut.io.output.valid.expect(false.B)
-      dut.clock.step(1)
-      dut.io.input.valid.poke(false.B)
-
-      for (i <- 0 until (num.length + den.length)) {
-        dut.io.output.valid.expect(false.B)
-        dut.io.input.ready.expect(false.B)
-        dut.clock.step(1)
-      }
-
-      dut.io.output.bits.expect(3.S)
-      dut.io.output.valid.expect(true.B)
-
-      dut.clock.step(1)
+      inputDriver.enqueue(1.S)
+      outputDriver.expectDequeue(3.S)
 
       // Sample 3: Write 0. on input port
-      dut.io.input.bits.poke(0.S)
-      dut.io.input.valid.poke(true.B)
-      dut.io.input.ready.expect(true.B)
-      dut.io.output.valid.expect(false.B)
-      dut.clock.step(1)
-      dut.io.input.valid.poke(false.B)
-
-      for (i <- 0 until (num.length + den.length)) {
-        dut.io.output.valid.expect(false.B)
-        dut.io.input.ready.expect(false.B)
-        dut.clock.step(1)
-      }
-
-      dut.io.output.bits.expect(1.S)
-      dut.io.output.valid.expect(true.B)
-
-      dut.clock.step(1)
+      inputDriver.enqueue(0.S)
+      outputDriver.expectDequeue(1.S)
 
       // Sample 4: Write 0. on input port
-      dut.io.input.bits.poke(0.S)
-      dut.io.input.valid.poke(true.B)
-      dut.io.input.ready.expect(true.B)
-      dut.io.output.valid.expect(false.B)
-      dut.clock.step(1)
-      dut.io.input.valid.poke(false.B)
-
-      for (i <- 0 until (num.length + den.length)) {
-        dut.io.output.valid.expect(false.B)
-        dut.io.input.ready.expect(false.B)
-        dut.clock.step(1)
-      }
-
-      dut.io.output.bits.expect(3.S)
-      dut.io.output.valid.expect(true.B)
+      inputDriver.enqueue(0.S)
+      outputDriver.expectDequeue(3.S)
     }
   }
 }
@@ -136,104 +85,38 @@ class IIRFilterDenominatorTest extends AnyFlatSpec with ChiselScalatestTester {
         denominatorNum = den.length
       )
     ) { dut =>
+      val inputDriver = new DecoupledDriver(dut.io.input)
+      inputDriver.setSinkClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+      inputDriver.setSourceClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+
+      val outputDriver = new DecoupledDriver(dut.io.output)
+      outputDriver.setSinkClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+      outputDriver.setSourceClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+
       dut.io.num.poke(Vec.Lit(num.map(_.S(coefWidth.W)): _*))
       dut.io.den.poke(Vec.Lit(den.map(_.S(coefWidth.W)): _*))
 
       dut.io.output.ready.poke(true.B)
 
       // Sample 1: Write 1. on input port
-      dut.io.input.bits.poke(1.S)
-      dut.io.input.valid.poke(true.B)
-      dut.io.input.ready.expect(true.B)
-      dut.io.output.valid.expect(false.B)
-      dut.clock.step(1)
-      dut.io.input.valid.poke(false.B)
-      dut.io.input.ready.expect(false.B)
-
-      for (i <- 0 until (num.length + den.length)) {
-        dut.io.output.valid.expect(false.B)
-        dut.io.input.ready.expect(false.B)
-        dut.clock.step(1)
-      }
-
-      dut.io.output.bits.expect(1.S)
-      dut.io.output.valid.expect(true.B)
-
-      dut.clock.step(1)
+      inputDriver.enqueue(1.S)
+      outputDriver.expectDequeue(1.S)
 
       // Sample 2: Write 1. on input port
-      dut.io.input.bits.poke(1.S)
-      dut.io.input.valid.poke(true.B)
-      dut.io.input.ready.expect(true.B)
-      dut.io.output.valid.expect(false.B)
-      dut.clock.step(1)
-      dut.io.input.valid.poke(false.B)
-
-      for (i <- 0 until (num.length + den.length)) {
-        dut.io.output.valid.expect(false.B)
-        dut.io.input.ready.expect(false.B)
-        dut.clock.step(1)
-      }
-
-      dut.io.output.bits.expect(-1.S)
-      dut.io.output.valid.expect(true.B)
-
-      dut.clock.step(1)
+      inputDriver.enqueue(1.S)
+      outputDriver.expectDequeue(-1.S)
 
       // Sample 3: Write 1. on input port
-      dut.io.input.bits.poke(1.S)
-      dut.io.input.valid.poke(true.B)
-      dut.io.input.ready.expect(true.B)
-      dut.io.output.valid.expect(false.B)
-      dut.clock.step(1)
-      dut.io.input.valid.poke(false.B)
-
-      for (i <- 0 until (num.length + den.length)) {
-        dut.io.output.valid.expect(false.B)
-        dut.io.input.ready.expect(false.B)
-        dut.clock.step(1)
-      }
-
-      dut.io.output.bits.expect(0.S)
-      dut.io.output.valid.expect(true.B)
-
-      dut.clock.step(1)
+      inputDriver.enqueue(1.S)
+      outputDriver.expectDequeue(0.S)
 
       // Sample 4: Write 1. on input port
-      dut.io.input.bits.poke(1.S)
-      dut.io.input.valid.poke(true.B)
-      dut.io.input.ready.expect(true.B)
-      dut.io.output.valid.expect(false.B)
-      dut.clock.step(1)
-      dut.io.input.valid.poke(false.B)
-
-      for (i <- 0 until (num.length + den.length)) {
-        dut.io.output.valid.expect(false.B)
-        dut.io.input.ready.expect(false.B)
-        dut.clock.step(1)
-      }
-
-      dut.io.output.bits.expect(3.S)
-      dut.io.output.valid.expect(true.B)
-
-      dut.clock.step(1)
+      inputDriver.enqueue(1.S)
+      outputDriver.expectDequeue(3.S)
 
       // Sample 5: Write 0. on input port
-      dut.io.input.bits.poke(0.S)
-      dut.io.input.valid.poke(true.B)
-      dut.io.input.ready.expect(true.B)
-      dut.io.output.valid.expect(false.B)
-      dut.clock.step(1)
-      dut.io.input.valid.poke(false.B)
-
-      for (i <- 0 until (num.length + den.length)) {
-        dut.io.output.valid.expect(false.B)
-        dut.io.input.ready.expect(false.B)
-        dut.clock.step(1)
-      }
-
-      dut.io.output.bits.expect(-5.S)
-      dut.io.output.valid.expect(true.B)
+      inputDriver.enqueue(0.S)
+      outputDriver.expectDequeue(-5.S)
     }
   }
 }
@@ -258,25 +141,24 @@ class IIRFilterReadyTest extends AnyFlatSpec with ChiselScalatestTester {
         denominatorNum = den.length
       )
     ) { dut =>
+      val inputDriver = new DecoupledDriver(dut.io.input)
+      inputDriver.setSinkClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+      inputDriver.setSourceClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+
+      val outputDriver = new DecoupledDriver(dut.io.output)
+      outputDriver.setSinkClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+      outputDriver.setSourceClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+
+      dut.io.num.poke(Vec.Lit(num.map(_.S(coefWidth.W)): _*))
       dut.io.num.poke(Vec.Lit(num.map(_.S(coefWidth.W)): _*))
       dut.io.den.poke(Vec.Lit(den.map(_.S(coefWidth.W)): _*))
 
       dut.io.output.ready.poke(false.B)
 
       // Sample 1: Write 1. on input port
-      dut.io.input.bits.poke(1.S)
-      dut.io.input.valid.poke(true.B)
-      dut.io.input.ready.expect(true.B)
-      dut.io.output.valid.expect(false.B)
-      dut.clock.step(1)
-      dut.io.input.valid.poke(false.B)
-      dut.io.input.ready.expect(false.B)
+      inputDriver.enqueue(1.S)
 
-      for (i <- 0 until (num.length + den.length)) {
-        dut.io.output.valid.expect(false.B)
-        dut.io.input.ready.expect(false.B)
-        dut.clock.step(1)
-      }
+      outputDriver.waitForValid()
 
       val extraClockCycles = 10
       for (i <- 0 until extraClockCycles) {
@@ -287,11 +169,7 @@ class IIRFilterReadyTest extends AnyFlatSpec with ChiselScalatestTester {
 
       dut.io.output.ready.poke(true.B)
 
-      dut.clock.step(1)
-
-      dut.io.output.bits.expect(1.S)
-      dut.io.output.valid.expect(false.B)
-      dut.io.input.ready.expect(true.B)
+      outputDriver.expectDequeue(1.S)
     }
   }
 }

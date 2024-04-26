@@ -44,6 +44,14 @@ trait IIRFilterBehavior {
           denominatorNum = (denominators.length - 1)
         )
       ) { dut =>
+        val inputDriver = new DecoupledDriver(dut.io.input)
+        inputDriver.setSinkClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+        inputDriver.setSourceClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+
+        val outputDriver = new DecoupledDriver(dut.io.output)
+        outputDriver.setSinkClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+        outputDriver.setSourceClock(dut.clock) // TODO remove me in Chisel > 6.0.x
+
         // Set numerators and denominators
         dut.io.num.poke(Vec.Lit(numerators.map(_.S(coefWidth.W)): _*))
         dut.io.den.poke(Vec.Lit(denominators.drop(1).map(_.S(coefWidth.W)): _*))
@@ -55,20 +63,10 @@ trait IIRFilterBehavior {
           dut.io.input.ready.expect(true.B)
 
           // Push input sample
-          dut.io.input.bits.poke(d.S(inputWidth.W))
-          dut.io.input.valid.poke(true.B)
-
-          dut.clock.step(1)
-
-          dut.io.input.valid.poke(false.B)
-
-          for (i <- 0 until (numerators.length + denominators.length - 1)) {
-            dut.io.output.valid.expect(false.B)
-            dut.io.input.ready.expect(false.B)
-            dut.clock.step(1)
-          }
+          inputDriver.enqueue(d.S(inputWidth.W))
 
           // Check output
+          outputDriver.waitForValid()
           val outputDecimalWidth = coefDecimalWidth + inputDecimalWidth
           val output = dut.io.output.bits.peek().litValue.toFloat / math.pow(2, outputDecimalWidth).toFloat
           val upperBound = e + precision
